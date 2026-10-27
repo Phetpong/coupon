@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   font-family: Tahoma, "Leelawadee UI", sans-serif;
   font-size: 15px;
   line-height: 1.6;
@@ -131,16 +131,20 @@ a:focus-visible, button:focus-visible, summary:focus-visible { outline: 3px soli
 .header-role.is-admin{color:#786028;background:#faf5e8;border-color:#eee2bf}
 .header-name{color:#485b4e;overflow-wrap:anywhere;font-weight:bold}
 #organization-picker{min-height:54px;font-size:17px;padding:12px}
-#organization-picker.enhanced-native{display:none}
-.organization-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:56px;padding:12px 14px;border:1px solid #a9bdae;background:#f6faf6;color:#203c2c;text-align:left;font-size:17px;line-height:1.5;overflow-wrap:anywhere}
-.organization-trigger::after{content:'⌄';flex-shrink:0;font-size:24px;line-height:1}
-.organization-dialog{width:calc(100% - 24px);max-width:560px;max-height:85vh;max-height:85dvh;padding:18px;border:1px solid var(--border);border-radius:14px;color:#26352d;background:#fff;overflow:auto}
-.organization-dialog::backdrop{background:#13251bcc}
-.organization-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
-.organization-dialog-heading h2{font-size:17px}
-.organization-dialog-heading button{flex-shrink:0;min-height:48px}
-.organization-dialog input{min-height:50px;font-size:17px}
-.organization-choices{display:grid;gap:10px;margin-top:14px}
-.organization-choice{width:100%;min-height:56px;padding:14px;text-align:left;font-size:17px;line-height:1.5;border:1px solid var(--border);background:#fff;color:#26352d;overflow-wrap:anywhere}
-.organization-choice[aria-pressed=true]{border:2px solid #285c43;background:#edf5ee;font-weight:bold}
-.organization-choice:hover{background:#edf5ee}
+select.enhanced-native{display:none}
+.picker-trigger{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;min-height:56px;padding:12px 14px;border:1px solid #a9bdae;background:#f6faf6;color:#203c2c;text-align:left;font-size:17px;line-height:1.5;overflow-wrap:anywhere}
+.picker-trigger::after{content:'⌄';flex-shrink:0;font-size:24px;line-height:1}
+.picker-dialog{width:calc(100% - 24px);max-width:560px;max-height:85vh;max-height:85dvh;padding:18px;border:1px solid var(--border);border-radius:14px;color:#26352d;background:#fff;overflow:auto}
+.picker-dialog::backdrop{background:#13251bcc}
+.picker-dialog-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.picker-dialog-heading h2{font-size:17px}
+.picker-dialog-heading button{flex-shrink:0;min-height:48px}
+.picker-dialog input{min-height:50px;font-size:17px}
+.picker-choices{display:grid;gap:10px;margin-top:14px}
+.picker-choice{width:100%;min-height:56px;padding:14px;text-align:left;font-size:17px;line-height:1.5;border:1px solid var(--border);background:#fff;color:#26352d;overflow-wrap:anywhere}
+.picker-choice[aria-pressed=true]{border:2px solid #285c43;background:#edf5ee;font-weight:bold}
+.picker-choice:hover{background:#edf5ee}
+.history-filter-fields .picker-trigger{margin-top:4px}
+.page-controls .picker-trigger{width:82px;min-height:44px;font-size:16px;padding:8px 10px;margin-left:0;gap:8px}
+.picker-trigger[aria-invalid=true]{border-color:#a3422e;outline:2px solid #f0c8be}
+.picker-trigger:disabled{background:#f0f2ef;color:#68746a;cursor:not-allowed}

@@ -30,6 +30,7 @@ async function loadHistory(params, scroll = false) {
     const replacement = doc.querySelector('#history');
     if (!response.ok || !replacement || doc.querySelector('[role="alert"]')) throw new Error('โหลดประวัติไม่ได้ กรุณาลองใหม่ หรือตรวจสอบการเข้าสู่ระบบ');
     section.replaceWith(replacement);
+    enhanceSelects(replacement);
     if (scroll) replacement.scrollIntoView({behavior:'smooth',block:'start'});
   } catch (error) {
     if (error.name === 'AbortError' || version !== historyVersion) return;
@@ -37,6 +38,104 @@ async function loadHistory(params, scroll = false) {
     if (!message) { message=document.createElement('p'); message.className='history-error'; message.setAttribute('role','alert'); section.prepend(message); }
     message.textContent=error.message;
   } finally { if(version===historyVersion) document.querySelector('#history')?.removeAttribute('aria-busy'); }
+}
+
+// Shared dialog picker for all selects, including AJAX-replaced filters.
+let pickerDialog, pickerTitle, pickerSearch, pickerList, activePicker;
+let pickerSequence = 0;
+const pickerSupported = typeof HTMLDialogElement !== 'undefined' && typeof HTMLDialogElement.prototype.showModal === 'function';
+function pickerLabel(select) {
+  if (select.name === 'per_page') return 'จำนวนรายการต่อหน้า';
+  return ({group_name:'กลุ่มผู้เข้าร่วม','organization-picker':'ฟาร์ม / ซุ้ม / หน่วยงาน','filter-group':'กรองกลุ่มผู้เข้าร่วม','filter-organization':'กรองฟาร์ม / ซุ้ม / หน่วยงาน'})[select.id] || select.getAttribute('aria-label') || 'เลือกรายการ';
+}
+function renderPickerChoices() {
+  if (!activePicker) return;
+  const {select, sync} = activePicker;
+  pickerList.replaceChildren();
+  const term=pickerSearch.value.trim().toLocaleLowerCase('th');
+  const farm=select.id==='organization-picker';
+  const all=Array.from(select.options).filter(option=>!option.disabled && !option.hidden && !(select.required && option.value===''));
+  const choices=all.filter(option=>option.value==='__new__' || option.value==='' || option.textContent.toLocaleLowerCase('th').includes(term));
+  if (!choices.some(option=>option.value!=='' && option.value!=='__new__')) {
+    const empty=document.createElement('p'); empty.className='muted'; empty.textContent=term?'ไม่พบรายการที่ค้นหา':'ยังไม่มีรายการให้เลือก'; pickerList.append(empty);
+  }
+  for (const option of choices) {
+    const button=document.createElement('button'); button.type='button'; button.className='picker-choice';
+    button.textContent=farm && option.value===''?'ไม่ระบุหน่วยงาน':option.textContent;
+    button.setAttribute('aria-pressed',String(option.selected));
+    button.addEventListener('click',()=>{
+      if (!select.isConnected || select.disabled) { pickerDialog.close(); return; }
+      select.value=option.value;
+      sync();
+      pickerDialog.close();
+      select.dispatchEvent(new Event('change',{bubbles:true}));
+    });
+    pickerList.append(button);
+  }
+}
+function openPicker(picker) {
+  if (picker.select.disabled) return;
+  activePicker=picker;
+  pickerTitle.textContent=pickerLabel(picker.select);
+  pickerSearch.value='';
+  // Search is unnecessary for the three page-size choices.
+  pickerSearch.hidden=picker.select.name==='per_page';
+  renderPickerChoices();
+  if (!pickerDialog.open) pickerDialog.showModal();
+}
+function enhanceSelects(root=document) {
+  if (!pickerSupported) return;
+  root.querySelectorAll('select:not([data-picker-ready])').forEach(select=>{
+    select.dataset.pickerReady='true';
+    const trigger=document.createElement('button'); trigger.type='button'; trigger.className='picker-trigger';
+    trigger.id='picker-trigger-'+(++pickerSequence);
+    trigger.setAttribute('aria-haspopup','dialog'); trigger.setAttribute('aria-controls','shared-picker-dialog');
+    select.after(trigger);
+    const labels=Array.from(select.labels || []);
+    labels.forEach(label=>label.htmlFor=trigger.id);
+    select.classList.add('enhanced-native'); select.tabIndex=-1; select.setAttribute('aria-hidden','true');
+    function sync() {
+      trigger.disabled=select.disabled;
+      trigger.textContent=select.selectedOptions[0]?.textContent || 'เลือกรายการ';
+      trigger.setAttribute('aria-label',pickerLabel(select)+': '+trigger.textContent);
+      if (select.validity.valid) trigger.removeAttribute('aria-invalid');
+    }
+    const picker={select,trigger,sync};
+    trigger.addEventListener('click',()=>openPicker(picker));
+    select.addEventListener('change',sync);
+    select.addEventListener('invalid',event=>{
+      event.preventDefault(); trigger.setAttribute('aria-invalid','true');
+      if (!pickerDialog.open) openPicker(picker);
+    });
+    new MutationObserver(()=>{
+      sync();
+      if (pickerDialog.open && activePicker?.select===select) renderPickerChoices();
+    }).observe(select,{childList:true,subtree:true,attributes:true,attributeFilter:['disabled','selected','hidden']});
+    select.form?.addEventListener('reset',()=>setTimeout(sync,0));
+    sync();
+  });
+}
+if (pickerSupported) {
+  pickerDialog=document.createElement('dialog'); pickerDialog.id='shared-picker-dialog'; pickerDialog.className='picker-dialog';
+  pickerDialog.setAttribute('aria-labelledby','shared-picker-title');
+  const heading=document.createElement('div'); heading.className='picker-dialog-heading';
+  pickerTitle=document.createElement('h2'); pickerTitle.id='shared-picker-title';
+  const close=document.createElement('button'); close.type='button'; close.textContent='ปิด'; close.className='secondary'; close.autofocus=true;
+  heading.append(pickerTitle,close);
+  pickerSearch=document.createElement('input'); pickerSearch.type='search'; pickerSearch.placeholder='ค้นหารายการ'; pickerSearch.setAttribute('aria-label','ค้นหารายการ');
+  pickerList=document.createElement('div'); pickerList.className='picker-choices';
+  pickerDialog.append(heading,pickerSearch,pickerList); document.body.append(pickerDialog);
+  close.addEventListener('click',()=>pickerDialog.close());
+  pickerSearch.addEventListener('input',renderPickerChoices);
+  enhanceSelects();
+  window.addEventListener('pageshow',()=>document.querySelectorAll('select[data-picker-ready]').forEach(select=>{
+    // Restore the label after back/forward navigation without firing business actions.
+    const trigger=select.nextElementSibling;
+    if(trigger?.classList.contains('picker-trigger')) {
+      trigger.textContent=select.selectedOptions[0]?.textContent || 'เลือกรายการ';
+      trigger.disabled=select.disabled;
+    }
+  }));
 }
 document.addEventListener('submit', event => {
   if (event.target.id !== 'history-filters' && !event.target.classList.contains('history-page-form')) return;
@@ -134,55 +233,4 @@ if (groupInput && organizationInput && countOutput) {
   updateOrganizationOptions();
   updateOrganizationCount();
   window.addEventListener('pageshow', () => { updateOrganizationOptions(); updateOrganizationCount(); });
-}
-
-// A large, searchable picker avoids tiny browser-owned option menus.
-const farmSelect = document.querySelector('#organization-picker');
-if (farmSelect && typeof HTMLDialogElement !== 'undefined' && typeof HTMLDialogElement.prototype.showModal === 'function') {
-  const trigger = document.createElement('button');
-  trigger.type = 'button'; trigger.className = 'organization-trigger';
-  trigger.setAttribute('aria-haspopup','dialog');
-  trigger.setAttribute('aria-controls','organization-dialog');
-  const dialog = document.createElement('dialog');
-  dialog.id = 'organization-dialog'; dialog.className = 'organization-dialog';
-  dialog.setAttribute('aria-labelledby','organization-dialog-title');
-  const heading = document.createElement('div'); heading.className='organization-dialog-heading';
-  const title = document.createElement('h2'); title.id='organization-dialog-title'; title.textContent='เลือกฟาร์ม / ซุ้ม / หน่วยงาน';
-  const close = document.createElement('button'); close.type='button'; close.textContent='ปิด'; close.className='secondary'; close.autofocus=true;
-  heading.append(title,close);
-  const search = document.createElement('input'); search.type='search'; search.placeholder='ค้นหาชื่อหน่วยงาน'; search.setAttribute('aria-label','ค้นหาชื่อหน่วยงาน');
-  const list = document.createElement('div'); list.className='organization-choices';
-  dialog.append(heading,search,list); document.body.append(dialog);
-  farmSelect.after(trigger); farmSelect.classList.add('enhanced-native');
-  document.querySelector('label[for="organization-picker"]')?.setAttribute('for','organization-trigger');
-  trigger.id='organization-trigger';
-  function syncTrigger() {
-    trigger.disabled=farmSelect.disabled;
-    trigger.textContent=farmSelect.selectedOptions[0]?.textContent || 'เลือกหน่วยงาน';
-    trigger.setAttribute('aria-label','ชื่อฟาร์ม / ซุ้ม / หน่วยงาน: '+trigger.textContent);
-  }
-  function renderChoices() {
-    list.replaceChildren();
-    const term=search.value.trim().toLocaleLowerCase('th');
-    const options=Array.from(farmSelect.options).filter(option=>option.value && option.value!=='__new__' && option.textContent.toLocaleLowerCase('th').includes(term));
-    if(!options.length) {
-      const empty=document.createElement('p'); empty.className='muted'; empty.textContent=term?'ไม่พบชื่อที่ค้นหา':'ยังไม่มีหน่วยงานในกลุ่มนี้'; list.append(empty);
-    }
-    const choices=[...options,{value:'__new__',textContent:'+ เพิ่มชื่อหน่วยงานใหม่'},{value:'',textContent:'ไม่ระบุหน่วยงาน'}];
-    for(const option of choices) {
-      const button=document.createElement('button'); button.type='button'; button.className='organization-choice'; button.textContent=option.textContent;
-      button.setAttribute('aria-pressed',String(option.value===farmSelect.value));
-      button.addEventListener('click',()=>{
-        farmSelect.value=option.value; dialog.close();
-        farmSelect.dispatchEvent(new Event('change',{bubbles:true})); syncTrigger();
-      });
-      list.append(button);
-    }
-  }
-  trigger.addEventListener('click',()=>{ search.value=''; renderChoices(); dialog.showModal(); });
-  close.addEventListener('click',()=>dialog.close());
-  search.addEventListener('input',renderChoices);
-  farmSelect.addEventListener('change',syncTrigger);
-  new MutationObserver(syncTrigger).observe(farmSelect,{childList:true,subtree:true,attributes:true});
-  syncTrigger();
 }
