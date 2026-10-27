@@ -135,3 +135,54 @@ if (groupInput && organizationInput && countOutput) {
   updateOrganizationCount();
   window.addEventListener('pageshow', () => { updateOrganizationOptions(); updateOrganizationCount(); });
 }
+
+// A large, searchable picker avoids tiny browser-owned option menus.
+const farmSelect = document.querySelector('#organization-picker');
+if (farmSelect && typeof HTMLDialogElement !== 'undefined' && typeof HTMLDialogElement.prototype.showModal === 'function') {
+  const trigger = document.createElement('button');
+  trigger.type = 'button'; trigger.className = 'organization-trigger';
+  trigger.setAttribute('aria-haspopup','dialog');
+  trigger.setAttribute('aria-controls','organization-dialog');
+  const dialog = document.createElement('dialog');
+  dialog.id = 'organization-dialog'; dialog.className = 'organization-dialog';
+  dialog.setAttribute('aria-labelledby','organization-dialog-title');
+  const heading = document.createElement('div'); heading.className='organization-dialog-heading';
+  const title = document.createElement('h2'); title.id='organization-dialog-title'; title.textContent='เลือกฟาร์ม / ซุ้ม / หน่วยงาน';
+  const close = document.createElement('button'); close.type='button'; close.textContent='ปิด'; close.className='secondary'; close.autofocus=true;
+  heading.append(title,close);
+  const search = document.createElement('input'); search.type='search'; search.placeholder='ค้นหาชื่อหน่วยงาน'; search.setAttribute('aria-label','ค้นหาชื่อหน่วยงาน');
+  const list = document.createElement('div'); list.className='organization-choices';
+  dialog.append(heading,search,list); document.body.append(dialog);
+  farmSelect.after(trigger); farmSelect.classList.add('enhanced-native');
+  document.querySelector('label[for="organization-picker"]')?.setAttribute('for','organization-trigger');
+  trigger.id='organization-trigger';
+  function syncTrigger() {
+    trigger.disabled=farmSelect.disabled;
+    trigger.textContent=farmSelect.selectedOptions[0]?.textContent || 'เลือกหน่วยงาน';
+    trigger.setAttribute('aria-label','ชื่อฟาร์ม / ซุ้ม / หน่วยงาน: '+trigger.textContent);
+  }
+  function renderChoices() {
+    list.replaceChildren();
+    const term=search.value.trim().toLocaleLowerCase('th');
+    const options=Array.from(farmSelect.options).filter(option=>option.value && option.value!=='__new__' && option.textContent.toLocaleLowerCase('th').includes(term));
+    if(!options.length) {
+      const empty=document.createElement('p'); empty.className='muted'; empty.textContent=term?'ไม่พบชื่อที่ค้นหา':'ยังไม่มีหน่วยงานในกลุ่มนี้'; list.append(empty);
+    }
+    const choices=[...options,{value:'__new__',textContent:'+ เพิ่มชื่อหน่วยงานใหม่'},{value:'',textContent:'ไม่ระบุหน่วยงาน'}];
+    for(const option of choices) {
+      const button=document.createElement('button'); button.type='button'; button.className='organization-choice'; button.textContent=option.textContent;
+      button.setAttribute('aria-pressed',String(option.value===farmSelect.value));
+      button.addEventListener('click',()=>{
+        farmSelect.value=option.value; dialog.close();
+        farmSelect.dispatchEvent(new Event('change',{bubbles:true})); syncTrigger();
+      });
+      list.append(button);
+    }
+  }
+  trigger.addEventListener('click',()=>{ search.value=''; renderChoices(); dialog.showModal(); });
+  close.addEventListener('click',()=>dialog.close());
+  search.addEventListener('input',renderChoices);
+  farmSelect.addEventListener('change',syncTrigger);
+  new MutationObserver(syncTrigger).observe(farmSelect,{childList:true,subtree:true,attributes:true});
+  syncTrigger();
+}
