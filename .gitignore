@@ -3,8 +3,7 @@
 !/.env.example
 *.zip
 *.log
-*.sql.gz
-*.sql
-!/schema.sql
+*.[sS][qQ][lL]
+*.[sS][qQ][lL].*
 /.idea/
 /.vscode/
