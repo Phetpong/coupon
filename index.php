@@ -77,7 +77,7 @@ if (isset($_POST['organization_existing']) && !in_array($_POST['organization_exi
 $knownOrg=false;
 foreach($organizations as $item) if($item['group_name']===$selectedGroup && $item['organization']===$selectedOrg) $knownOrg=true;
 ?>
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ระบบจ่ายคูปอง · <?=e($config['event'])?></title><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ระบบจ่ายคูปอง · <?=e($config['event'])?></title><link rel="icon" type="image/png" href="<?=e(asset_url('assets/logo.png'))?>"><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
 <?php require __DIR__.'/header.php'; ?>
 <main><section class="hero"><h1><?=e($config['event'])?></h1></section>
 <?php if($error): ?><div class="notice danger" role="alert"><?=e($error)?></div><?php endif ?>
