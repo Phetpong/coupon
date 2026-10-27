@@ -1,6 +1,6 @@
 <?php
 require __DIR__.'/app.php';
-$error = ''; $result = null; $rows = []; $organizations = []; $total = 0; $today = 0;
+$error = ''; $result = null; $rows = []; $organizations = []; $total = 0; $staffTotal = 0;
 $filterGroup=trim((string)($_GET['filter_group']??''));
 $filterOrg=clean_text((string)($_GET['filter_organization']??''));
 $search=trim((string)($_GET['search']??''));
@@ -53,7 +53,7 @@ try {
             $q=db()->prepare('SELECT c.*,s.name AS staff_name FROM coupons c JOIN staff s ON s.id=c.staff_id WHERE c.id=? AND c.event_key=?'); $q->execute([$receipt['id'],$config['event_key']]);
             $result=$q->fetch(); if ($result) $result['kind']=$receipt['kind'];
         }
-        $q=db()->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(DATE(issued_at)=CURRENT_DATE()),0) AS today FROM coupons WHERE event_key=?'); $q->execute([$config['event_key']]); $stats=$q->fetch(); $total=$stats['total']; $today=$stats['today'];
+        $q=db()->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(staff_id=?),0) AS staff_total FROM coupons WHERE event_key=?'); $q->execute([$_SESSION['staff']['id'],$config['event_key']]); $stats=$q->fetch(); $total=$stats['total']; $staffTotal=$stats['staff_total'];
         $history=history_records(db(),$config['event_key'],$filterGroup,$filterOrg,$search,max(1,(int)($_GET['page']??1)),$perPage);
         $rows=$history['rows'];
     }
@@ -85,7 +85,7 @@ foreach($organizations as $item) if($item['group_name']===$selectedGroup && $ite
 <section class="card login"><h2>เข้าสู่ระบบ</h2><form method="post"><?=csrf()?><input type="hidden" name="action" value="login"><label>ชื่อผู้ใช้<input name="username" required autocomplete="username" maxlength="80"></label><label>รหัสผ่าน<input type="password" name="password" required autocomplete="current-password"></label><button class="primary">เข้าสู่ระบบเจ้าหน้าที่</button></form></section>
 <?php else: ?>
 
-<section class="stats"><div><span>จ่ายคูปองทั้งหมด</span><strong><?=number_format((int)$total)?><small> คน</small></strong></div><div><span>จ่ายคูปองวันนี้</span><strong><?=number_format((int)$today)?><small> คน</small></strong></div></section>
+<section class="stats"><div><span>จ่ายคูปองทั้งหมด</span><strong><?=number_format((int)$total)?><small> คน</small></strong></div><div><span>ยอดสะสมของฉัน</span><strong><?=number_format((int)$staffTotal)?><small> คน</small></strong></div></section>
 <?php if($result): ?><section role="status" class="notice <?=$result['kind']==='success'?'success':'danger'?>"><h2><?=$result['kind']==='success'?'✓ บันทึกสำเร็จ สามารถมอบคูปองได้':($result['kind']==='name_duplicate'?'พบชื่อ–นามสกุลซ้ำ แต่เลขบัตรต่างกัน กรุณาตรวจสอบกับผู้ดูแลก่อนจ่าย':'รับคูปองแล้ว — ไม่สามารถรับซ้ำได้')?></h2><p><?=e($result['full_name'])?> · <?=e($result['citizen_id'])?></p><p><?=e($result['issued_at'])?><br>ผู้บันทึก: <?=e($result['staff_name'])?></p></section><?php endif ?>
 <div class="layout"><section class="card registration-panel" id="registration"><div class="panel-heading registration-heading"><div class="panel-title"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 5H5v15h15v-9M9 15l1-4 8-8 3 3-8 8-4 1Z" stroke-linecap="round" stroke-linejoin="round"/></svg></span><h2>บันทึกผู้รับคูปอง</h2></div><a class="panel-jump" href="#history">ดูประวัติ ↓</a></div>
 <form method="post" id="issue-form"><?=csrf()?><input type="hidden" name="action" value="issue">
