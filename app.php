@@ -21,6 +21,7 @@ function db(): PDO {
     return $pdo;
 }
 function e($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
+function asset_url(string $path): string { return $path.'?v='.filemtime(__DIR__.'/'.$path); }
 function current_staff(): ?array {
     if (!isset($_SESSION['staff']) || time()-($_SESSION['activity']??0)>7200) { unset($_SESSION['staff']); return null; }
     $q=db()->prepare('SELECT id,username,name,role FROM staff WHERE id=?'); $q->execute([$_SESSION['staff']['id']]);

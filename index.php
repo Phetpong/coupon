@@ -23,7 +23,9 @@ try {
         }
         if ($action === 'issue') {
             if (!isset($_SESSION['staff'])) throw new RuntimeException('กรุณาเข้าสู่ระบบก่อนบันทึก');
-            $id=trim($_POST['citizen_id']??''); $name=clean_text($_POST['full_name']??''); $group=$_POST['group_name']??''; $org=clean_text($_POST['organization']??'');
+            $id=trim($_POST['citizen_id']??''); $name=clean_text($_POST['full_name']??''); $group=$_POST['group_name']??'';
+            $pickedOrg=(string)($_POST['organization_existing']??'');
+            $org=clean_text($pickedOrg!=='' && $pickedOrg!=='__new__'?$pickedOrg:($_POST['organization']??''));
             if (!valid_id($id)) throw new RuntimeException('เลขบัตรประชาชนไม่ถูกต้อง กรุณาตรวจสอบเลข 13 หลัก');
             if ($name==='' || mb_strlen($name)>200 || mb_strlen($org)>200 || !in_array($group,$groups,true)) throw new RuntimeException('กรุณากรอกชื่อและเลือกกลุ่มผู้เข้าร่วมให้ถูกต้อง');
             if (!preg_match('/^\S+\s+\S+/u',normalized_name($name))) throw new RuntimeException('กรุณากรอกชื่อและนามสกุล โดยเว้นวรรคระหว่างชื่อกับนามสกุล');
@@ -31,6 +33,7 @@ try {
                 $q=db()->prepare('INSERT INTO coupons (event_key,citizen_id,full_name,name_key,group_name,organization,staff_id) VALUES (?,?,?,?,?,?,?)');
                 $q->execute([$config['event_key'],$id,$name,name_key($name),$group,$org,$_SESSION['staff']['id']]);
                 $_SESSION['receipt']=['kind'=>'success','id'=>db()->lastInsertId()];
+                $_SESSION['last_group']=$group; $_SESSION['last_organization']=$org;
             } catch (PDOException $ex) {
                 if (($ex->errorInfo[1]??0)!==1062) throw $ex;
                 $q=db()->prepare('SELECT id FROM coupons WHERE event_key=? AND citizen_id=?'); $q->execute([$config['event_key'],$id]);
@@ -68,8 +71,13 @@ if (isset($_SESSION['staff'])) {
         }
     } catch (PDOException $ex) { error_log('Organization list unavailable: '.$ex->getCode()); }
 }
+$selectedGroup=(string)($_POST['group_name']??$_SESSION['last_group']??'');
+$selectedOrg=clean_text((string)($_POST['organization']??$_SESSION['last_organization']??''));
+if (isset($_POST['organization_existing']) && !in_array($_POST['organization_existing'],['','__new__'],true)) $selectedOrg=clean_text($_POST['organization_existing']);
+$knownOrg=false;
+foreach($organizations as $item) if($item['group_name']===$selectedGroup && $item['organization']===$selectedOrg) $knownOrg=true;
 ?>
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ระบบจ่ายคูปอง · <?=e($config['event'])?></title><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js" defer></script></head><body>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ระบบจ่ายคูปอง · <?=e($config['event'])?></title><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
 <?php require __DIR__.'/header.php'; ?>
 <main><section class="hero"><h1><?=e($config['event'])?></h1></section>
 <?php if($error): ?><div class="notice danger" role="alert"><?=e($error)?></div><?php endif ?>
@@ -81,10 +89,10 @@ if (isset($_SESSION['staff'])) {
 <?php if($result): ?><section role="status" class="notice <?=$result['kind']==='success'?'success':'danger'?>"><h2><?=$result['kind']==='success'?'✓ บันทึกสำเร็จ สามารถมอบคูปองได้':($result['kind']==='name_duplicate'?'พบชื่อ–นามสกุลซ้ำ แต่เลขบัตรต่างกัน กรุณาตรวจสอบกับผู้ดูแลก่อนจ่าย':'รับคูปองแล้ว — ไม่สามารถรับซ้ำได้')?></h2><p><?=e($result['full_name'])?> · <?=e($result['citizen_id'])?></p><p><?=e($result['issued_at'])?><br>ผู้บันทึก: <?=e($result['staff_name'])?></p></section><?php endif ?>
 <div class="layout"><section class="card"><div class="section-title"><div><h2>บันทึกการจ่ายคูปอง</h2></div></div>
 <form method="post" id="issue-form"><?=csrf()?><input type="hidden" name="action" value="issue">
-<label for="group_name">กลุ่มผู้เข้าร่วม <em>*</em></label><select id="group_name" name="group_name" required><option value="">เลือกกลุ่มผู้เข้าร่วม</option><?php foreach($groups as $group): ?><option <?=($_POST['group_name']??'')===$group?'selected':''?>><?=e($group)?></option><?php endforeach ?></select>
+<label for="group_name">กลุ่มผู้เข้าร่วม <em>*</em></label><select id="group_name" name="group_name" required><option value="">เลือกกลุ่มผู้เข้าร่วม</option><?php foreach($groups as $group): ?><option <?=$selectedGroup===$group?'selected':''?>><?=e($group)?></option><?php endforeach ?></select>
 <label for="organization-picker">ชื่อฟาร์ม / ซุ้ม / หน่วยงาน <span class="muted">(ถ้ามี)</span></label>
-<select id="organization-picker" aria-label="เลือกฟาร์ม ซุ้ม หรือหน่วยงาน" hidden><option value="">เลือกหน่วยงาน</option></select>
-<div id="organization-entry"><label for="organization" class="muted">ชื่อหน่วยงานใหม่</label><input id="organization" name="organization" autocomplete="off" maxlength="200" placeholder="พิมพ์ชื่อหน่วยงาน" value="<?=e($_POST['organization']??'')?>"></div>
+<select id="organization-picker" name="organization_existing" aria-label="เลือกฟาร์ม ซุ้ม หรือหน่วยงาน"><option value="">เลือกหน่วยงาน</option><?php foreach($organizations as $item): ?><?php if($item['group_name']===$selectedGroup): ?><option value="<?=e($item['organization'])?>" <?=$selectedOrg===$item['organization']?'selected':''?>><?=e($item['organization'])?></option><?php endif ?><?php endforeach ?><option value="__new__" <?=$selectedOrg!=='' && !$knownOrg?'selected':''?>>+ เพิ่มชื่อหน่วยงานใหม่</option></select>
+<div id="organization-entry" <?=$knownOrg || $selectedOrg===''?'hidden':''?>><label for="organization" class="muted">ชื่อหน่วยงานใหม่</label><input id="organization" name="organization" autocomplete="off" maxlength="200" placeholder="พิมพ์ชื่อหน่วยงาน" value="<?=e($selectedOrg)?>"></div>
 <template id="organization-source"><?php foreach($organizations as $organization): ?><option data-group="<?=e($organization['group_name'])?>" value="<?=e($organization['organization'])?>"></option><?php endforeach ?></template>
 <output id="organization-count" class="organization-count" aria-live="polite" hidden></output>
 <button type="button" class="view-members" id="view-members" hidden>ดูรายชื่อที่ลงทะเบียนแล้ว ↓</button>

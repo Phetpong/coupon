@@ -39,7 +39,7 @@ try {
     $q->execute($args);$users=$q->fetchAll();
 } catch(PDOException $e) { $error='โหลดข้อมูลผู้ใช้ไม่ได้'; }
 ?>
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>จัดการผู้ใช้</title><link rel="stylesheet" href="assets/style.css"><script src="assets/app.js" defer></script></head><body>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>จัดการผู้ใช้</title><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
 <?php require __DIR__.'/header.php'; ?>
 <main><h1>จัดการผู้ใช้</h1>
 <?php if($error): ?><p class="notice danger" role="alert"><?=e($error)?></p><?php endif ?>
