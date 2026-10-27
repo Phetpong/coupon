@@ -1,0 +1,10 @@
+/.env
+/.env.*
+!/.env.example
+*.zip
+*.log
+*.sql.gz
+*.sql
+!/schema.sql
+/.idea/
+/.vscode/
