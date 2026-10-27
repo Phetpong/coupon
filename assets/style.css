@@ -148,3 +148,22 @@ select.enhanced-native{display:none}
 .page-controls .picker-trigger{width:82px;min-height:44px;font-size:16px;padding:8px 10px;margin-left:0;gap:8px}
 .picker-trigger[aria-invalid=true]{border-color:#a3422e;outline:2px solid #f0c8be}
 .picker-trigger:disabled{background:#f0f2ef;color:#68746a;cursor:not-allowed}
+/* Distinct entry and history sections, with the same compact layout. */
+#registration,#history{scroll-margin-top:12px}
+.registration-panel{border-color:#b5cdbb;border-top:3px solid #285c43}
+.panel-heading{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0 8px;margin:calc(-1 * var(--card-space)) calc(-1 * var(--card-space)) 10px;padding:5px var(--card-space);border-radius:5px 5px 0 0;border-bottom:1px solid}
+.registration-heading{color:#234f38;background:#edf5ef;border-bottom-color:#d6e6d9}
+.panel-title{display:flex;align-items:center;gap:8px;min-width:0;min-height:40px}
+.panel-title h2{font-size:16px;line-height:1.5}
+.panel-icon{display:grid;place-items:center;flex-shrink:0;width:30px;height:30px;border-radius:7px;background:#dcecdf}
+.panel-jump{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:4px 2px;color:inherit;font-size:12px;text-decoration:underline;text-underline-offset:3px;white-space:nowrap}
+.history-panel{margin-top:26px;border-color:#c4d3df;border-top:3px solid #456b86;background:#f8fafc}
+.records-heading{color:#2b526e;background:#edf3f8;border-bottom-color:#d7e2eb}
+.records-heading .panel-icon{background:#dce8f1}
+.history-results{margin-bottom:12px;align-items:center}
+.history-results .result-count{color:#2b526e;background:#e6eff6;font-size:13px;font-weight:bold;padding:3px 10px;border-radius:20px}
+.history-panel .secondary{background:#e3edf5;color:#2b526e}
+.history-panel .picker-trigger{background:#fff;border-color:#bccedc;color:#294d66}
+.history-panel .filter-summary{background:#eaf1f7;color:#2b526e}
+.history-panel .page-links a{color:#2b526e;border-color:#ccdae5}
+.history-panel .history-item{border-color:#d6e0e8}

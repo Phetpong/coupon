@@ -87,7 +87,7 @@ foreach($organizations as $item) if($item['group_name']===$selectedGroup && $ite
 
 <section class="stats"><div><span>จ่ายคูปองทั้งหมด</span><strong><?=number_format((int)$total)?><small> คน</small></strong></div><div><span>จ่ายคูปองวันนี้</span><strong><?=number_format((int)$today)?><small> คน</small></strong></div></section>
 <?php if($result): ?><section role="status" class="notice <?=$result['kind']==='success'?'success':'danger'?>"><h2><?=$result['kind']==='success'?'✓ บันทึกสำเร็จ สามารถมอบคูปองได้':($result['kind']==='name_duplicate'?'พบชื่อ–นามสกุลซ้ำ แต่เลขบัตรต่างกัน กรุณาตรวจสอบกับผู้ดูแลก่อนจ่าย':'รับคูปองแล้ว — ไม่สามารถรับซ้ำได้')?></h2><p><?=e($result['full_name'])?> · <?=e($result['citizen_id'])?></p><p><?=e($result['issued_at'])?><br>ผู้บันทึก: <?=e($result['staff_name'])?></p></section><?php endif ?>
-<div class="layout"><section class="card"><div class="section-title"><div><h2>บันทึกการจ่ายคูปอง</h2></div></div>
+<div class="layout"><section class="card registration-panel" id="registration"><div class="panel-heading registration-heading"><div class="panel-title"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 5H5v15h15v-9M9 15l1-4 8-8 3 3-8 8-4 1Z" stroke-linecap="round" stroke-linejoin="round"/></svg></span><h2>บันทึกผู้รับคูปอง</h2></div><a class="panel-jump" href="#history">ดูประวัติ ↓</a></div>
 <form method="post" id="issue-form"><?=csrf()?><input type="hidden" name="action" value="issue">
 <label for="group_name">กลุ่มผู้เข้าร่วม <em>*</em></label><select id="group_name" name="group_name" required><option value="">เลือกกลุ่มผู้เข้าร่วม</option><?php foreach($groups as $group): ?><option <?=$selectedGroup===$group?'selected':''?>><?=e($group)?></option><?php endforeach ?></select>
 <label for="organization-picker">ชื่อฟาร์ม / ซุ้ม / หน่วยงาน <span class="muted">(ถ้ามี)</span></label>
@@ -100,8 +100,9 @@ foreach($organizations as $item) if($item['group_name']===$selectedGroup && $ite
 <label for="full_name">ชื่อ–นามสกุล <em>*</em></label><input id="full_name" name="full_name" required maxlength="200" placeholder="คำนำหน้า ชื่อ และนามสกุล" value="<?=e($_POST['full_name']??'')?>">
 <button class="primary" id="issue-button">ยืนยันบันทึกและจ่ายคูปอง</button></form></section>
 </div>
-<section class="card history" id="history">
-<div class="history-heading"><h2>ประวัติการจ่ายคูปอง</h2><span>พบ <?=$history['total']?> คน</span></div>
+<section class="card history history-panel" id="history">
+<div class="panel-heading records-heading"><div class="panel-title"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h16M4 18h16M8 4v16" stroke-linecap="round"/></svg></span><h2>ประวัติการจ่ายคูปอง</h2></div><a class="panel-jump" href="#registration">กลับไปบันทึก ↑</a></div>
+<div class="history-heading history-results"><span>ผู้รับคูปองที่ลงทะเบียนแล้ว</span><span class="result-count"><?=$history['total']?> คน</span></div>
 <form method="get" action="index.php#history" class="search history-search" id="history-filters">
 <input type="hidden" name="per_page" value="<?=$perPage?>">
 <div class="history-filter-fields">
