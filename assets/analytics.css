@@ -1,0 +1,65 @@
+/* Loaded only by analytics.php. Keep the shared registration layout unchanged. */
+.analytics-screen { --content-width: 1648px; }
+.analytics-screen .analytics-page { margin-top: 24px; }
+.analytics-screen .analytics-title { margin-bottom: 20px; }
+.analytics-screen .analytics-title h1 { font-size: clamp(22px, 2vw, 30px); }
+.analytics-screen .analytics-title p { margin-top: 6px; }
+.analytics-screen .analytics-workspace { display: grid; gap: 20px; margin-top: 20px; }
+.analytics-screen .analytics-section { margin-top: 0; }
+.analytics-screen .analytics-metrics { gap: 16px; }
+.analytics-screen .analytics-metrics > div { padding: 18px 20px; }
+.analytics-screen .analytics-metrics strong { font-size: 36px; font-variant-numeric: tabular-nums; }
+.analytics-screen .analytics-detail-heading { margin-bottom: 16px; }
+.analytics-screen .analytics-report-form { margin: 8px 0 0; }
+.analytics-screen .analytics-table-wrap { display: none; }
+.analytics-screen .analytics-trend .empty { padding: 48px 0; }
+.analytics-screen .analytics-chart { gap: 20px; margin-top: 24px; }
+.analytics-screen .analytics-bar progress { height: 18px; margin-top: 8px; }
+.analytics-screen #breakdown { scroll-margin-top: 16px; }
+.analytics-screen #breakdown > .muted { margin: 12px 0 0; }
+
+@media (min-width: 768px) {
+  .analytics-screen .analytics-filters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; align-items: end; }
+  .analytics-screen .analytics-filters > .date-range { grid-column: 1 / -1; }
+  .analytics-screen .analytics-filters label { margin: 0; min-width: 0; }
+  .analytics-screen .analytics-actions { margin: 0; }
+  .analytics-screen .analytics-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .analytics-screen .analytics-mobile-records { display: none; }
+  .analytics-screen .analytics-table-wrap { display: block; }
+  .analytics-screen .analytics-table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 14px; }
+  .analytics-screen .analytics-table caption { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); }
+  .analytics-screen .analytics-table th, .analytics-screen .analytics-table td { padding: 12px 14px; border-bottom: 1px solid #e3e9e4; text-align: right; vertical-align: top; font-variant-numeric: tabular-nums; }
+  .analytics-screen .analytics-table th:first-child { width: 62%; text-align: left; overflow-wrap: anywhere; }
+  .analytics-screen .analytics-table thead { background: #f0f5f1; color: #334d3e; }
+  .analytics-screen .analytics-table tbody th { font-weight: normal; }
+  .analytics-screen .analytics-table small { display: block; color: #637066; margin-top: 3px; font-size: 12px; }
+  .analytics-screen .analytics-table td.empty { text-align: center; padding: 48px 14px; }
+  .analytics-screen .analytics-table tbody tr:hover { background: #f6faf7; }
+  .analytics-screen .analytics-detail-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .analytics-screen .analytics-report-form { flex: 0 1 340px; margin: 0; }
+  .analytics-screen .analytics-report-form label { margin: 0; }
+  .analytics-screen .analytics-report-form > button { margin-bottom: 0; }
+}
+
+@media (min-width: 1200px) {
+  .analytics-screen .app-header { flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; padding-top: 8px; padding-bottom: 8px; }
+  .analytics-screen .header-top { flex: 1; gap: 24px; }
+  .analytics-screen .header-person { padding-top: 0; }
+  .analytics-screen .analytics-filters { grid-template-columns: minmax(320px, 1.5fr) minmax(200px, 1fr) minmax(190px, 1fr) auto; }
+  .analytics-screen .analytics-filters > .date-range { grid-column: auto; }
+  .analytics-screen .analytics-filters input, .analytics-screen .analytics-filters .picker-trigger { min-height: 48px; font-size: 15px; padding: 10px 12px; }
+  .analytics-screen .analytics-actions .primary, .analytics-screen .analytics-actions .quiet { min-height: 48px; white-space: nowrap; }
+  .analytics-screen .analytics-actions .primary { min-width: 100px; }
+  .analytics-screen .analytics-workspace { grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: start; }
+  .analytics-screen .analytics-trend { min-height: 400px; }
+  .analytics-screen .analytics-table-wrap { max-height: max(280px, calc(100dvh - 780px)); overflow: auto; }
+  .analytics-screen .analytics-table-wrap:focus-visible { outline: 3px solid #9ec5a7; outline-offset: 2px; }
+  .analytics-screen .analytics-table thead { position: sticky; top: 0; z-index: 1; }
+  .analytics-screen .analytics-chart { max-height: max(280px, calc(100dvh - 780px)); overflow: auto; }
+  .analytics-screen .analytics-bar progress { height: 28px; }
+  .analytics-screen .analytics-trend .history-heading { align-items: center; }
+  .analytics-screen .pagination { grid-template-columns: 1fr auto; gap: 10px 16px; align-items: center; }
+  .analytics-screen .page-summary { grid-column: 1 / -1; }
+  .analytics-screen .page-links { min-width: 320px; }
+  .analytics-screen .page-controls { justify-content: flex-end; }
+}
