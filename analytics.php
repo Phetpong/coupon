@@ -2,8 +2,8 @@
 require __DIR__.'/app.php';
 require __DIR__.'/analytics-data.php';
 try { $staff=current_staff(); } catch(PDOException $e) { http_response_code(503);exit('ไม่สามารถเชื่อมต่อฐานข้อมูล'); }
-if(!$staff) { header('Location: index.php');exit; }
-if(!is_admin($staff)) { http_response_code(403);exit('ไม่มีสิทธิ์ดูข้อมูลวิเคราะห์'); }
+if(!$staff) { audit_attempt('access_denied',null,null,null,['page'=>'analytics.php','reason'=>'login_required']); header('Location: index.php');exit; }
+if(!is_admin($staff)) { audit_attempt('access_denied',$staff,null,null,['page'=>'analytics.php','reason'=>'admin_required']); http_response_code(403);exit('ไม่มีสิทธิ์ดูข้อมูลวิเคราะห์'); }
 $from=trim((string)($_GET['from']??''));$to=trim((string)($_GET['to']??''));
 $group=(string)($_GET['group']??'');$staffId=max(0,(int)($_GET['staff']??0));
 $report=(string)($_GET['report']??'group');if(!in_array($report,['group','organization','staff','daily'],true))$report='group';

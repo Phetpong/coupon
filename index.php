@@ -7,25 +7,34 @@ $formValues=$_SERVER['REQUEST_METHOD']==='POST'?$_POST:$draft;
 $filterGroup=trim((string)($_GET['filter_group']??''));
 $filterOrg=clean_text((string)($_GET['filter_organization']??''));
 $search=trim((string)($_GET['search']??''));
+$record=max(0,(int)($_GET['record']??0));
 $perPage=page_size($_GET['per_page']??10);
 $history=page_info(0,1,$perPage);
 if (isset($_SESSION['staff']) && time()-($_SESSION['activity']??0)>7200) unset($_SESSION['staff']);
 if (isset($_SESSION['staff'])) $_SESSION['activity'] = time();
 try {
+    // A valid logout must work even when the database or audit storage is unavailable.
+    if ($_SERVER['REQUEST_METHOD']==='POST' && ($_POST['action']??'')==='logout' && hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) {
+        if (isset($_SESSION['staff'])) audit_attempt('logout',$_SESSION['staff']);
+        $_SESSION=[]; session_destroy(); header('Location: index.php'); exit;
+    }
     current_staff();
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        if (!hash_equals($_SESSION['csrf'], (string)($_POST['csrf']??''))) { http_response_code(403); throw new RuntimeException('หน้าฟอร์มหมดอายุ กรุณารีเฟรชแล้วลองใหม่'); }
+        if (!hash_equals($_SESSION['csrf'], (string)($_POST['csrf']??''))) { audit_attempt('csrf_rejected',$_SESSION['staff']??null,null,null,['page'=>'index.php']); http_response_code(403); throw new RuntimeException('หน้าฟอร์มหมดอายุ กรุณารีเฟรชแล้วลองใหม่'); }
         $action = $_POST['action']??'';
-        if ($action === 'logout') { $_SESSION = []; session_destroy(); header('Location: index.php'); exit; }
         if ($action === 'login') {
             usleep(400000);
             $q=db()->prepare('SELECT * FROM staff WHERE username=?'); $q->execute([trim($_POST['username']??'')]); $staff=$q->fetch();
-            if (!$staff || !password_verify($_POST['password']??'', $staff['password_hash'])) throw new RuntimeException('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
-            session_regenerate_id(true); $_SESSION['staff']=['id'=>$staff['id'],'name'=>$staff['name']]; $_SESSION['activity']=time(); $_SESSION['csrf']=bin2hex(random_bytes(32));
+            if (!$staff || !password_verify($_POST['password']??'', $staff['password_hash'])) {
+                audit_attempt('login_failed',null,null,null,['attempted_username'=>trim($_POST['username']??''),'reason'=>'invalid_credentials']);
+                throw new RuntimeException('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง');
+            }
+            audit_write(db(),'login_success','success',$staff);
+            session_regenerate_id(true); $_SESSION['staff']=array_intersect_key($staff,array_flip(['id','name','username','role'])); $_SESSION['activity']=time(); $_SESSION['csrf']=bin2hex(random_bytes(32));
             header('Location: index.php'); exit;
         }
         if ($action === 'issue') {
-            if (!isset($_SESSION['staff'])) throw new RuntimeException('กรุณาเข้าสู่ระบบก่อนบันทึก');
+            if (!isset($_SESSION['staff'])) { audit_attempt('access_denied',null,null,null,['page'=>'index.php','reason'=>'login_required']); throw new RuntimeException('กรุณาเข้าสู่ระบบก่อนบันทึก'); }
             $id=trim($_POST['citizen_id']??''); $name=clean_text($_POST['full_name']??''); $group=$_POST['group_name']??'';
             $pickedOrg=(string)($_POST['organization_existing']??'');
             $org=clean_text($pickedOrg!=='' && $pickedOrg!=='__new__'?$pickedOrg:($_POST['organization']??''));
@@ -35,11 +44,16 @@ try {
             if ($name==='' || mb_strlen($name)>200 || !preg_match('/^\S+\s+\S+/u',normalized_name($name))) $fieldErrors['full_name']='กรอกชื่อและนามสกุล เว้นวรรคระหว่างชื่อกับนามสกุล ไม่เกิน 200 ตัวอักษร';
             if ($fieldErrors) throw new RuntimeException('กรุณาตรวจสอบข้อมูลที่ระบุ');
             try {
+                db()->beginTransaction();
                 $q=db()->prepare('INSERT INTO coupons (event_key,citizen_id,full_name,name_key,group_name,organization,staff_id) VALUES (?,?,?,?,?,?,?)');
                 $q->execute([$config['event_key'],$id,$name,name_key($name),$group,$org,$_SESSION['staff']['id']]);
-                $_SESSION['receipt']=['kind'=>'success','id'=>db()->lastInsertId()];
+                $couponId=(int)db()->lastInsertId();
+                audit_write(db(),'coupon_issued','success',$_SESSION['staff'],'coupon',$couponId);
+                db()->commit();
+                $_SESSION['receipt']=['kind'=>'success','id'=>$couponId];
                 $_SESSION['last_group']=$group; $_SESSION['last_organization']=$org;
             } catch (PDOException $ex) {
+                if (db()->inTransaction()) db()->rollBack();
                 if (($ex->errorInfo[1]??0)!==1062) throw $ex;
                 $_SESSION['issue_draft']=array_intersect_key($_POST,array_flip(['citizen_id','full_name','group_name','organization','organization_existing']));
                 $q=db()->prepare('SELECT id FROM coupons WHERE event_key=? AND citizen_id=?'); $q->execute([$config['event_key'],$id]);
@@ -49,6 +63,10 @@ try {
                     $existing=$q->fetchColumn();
                     $_SESSION['receipt']=['kind'=>'name_duplicate','id'=>$existing];
                 } else $_SESSION['receipt']=['kind'=>'duplicate','id'=>$existing];
+                audit_attempt($_SESSION['receipt']['kind']==='duplicate'?'coupon_id_duplicate':'coupon_name_duplicate',$_SESSION['staff'],'coupon',$existing?(int)$existing:null);
+            } catch (Throwable $ex) {
+                if (db()->inTransaction()) db()->rollBack();
+                throw $ex;
             }
             header('Location: index.php'); exit;
         }
@@ -60,7 +78,7 @@ try {
             $result=$q->fetch(); if ($result) $result['kind']=$receipt['kind'];
         }
         $q=db()->prepare('SELECT COUNT(*) AS total, COALESCE(SUM(staff_id=?),0) AS staff_total FROM coupons WHERE event_key=?'); $q->execute([$_SESSION['staff']['id'],$config['event_key']]); $stats=$q->fetch(); $total=$stats['total']; $staffTotal=$stats['staff_total'];
-        $history=history_records(db(),$config['event_key'],$filterGroup,$filterOrg,$search,max(1,(int)($_GET['page']??1)),$perPage);
+        $history=history_records(db(),$config['event_key'],$filterGroup,$filterOrg,$search,max(1,(int)($_GET['page']??1)),$perPage,$record);
         $rows=$history['rows'];
     }
 } catch (PDOException $ex) { error_log('Coupon database error: '.$ex->getCode()); $error='เชื่อมต่อฐานข้อมูลไม่ได้ หรือยังไม่ได้ติดตั้งระบบ กรุณาแจ้งผู้ดูแล'; }
@@ -113,6 +131,7 @@ foreach($organizations as $item) if($item['group_name']===$selectedGroup && $ite
 <div class="history-heading history-results"><span>ผู้รับคูปองที่ลงทะเบียนแล้ว</span><span class="result-count"><?=$history['total']?> คน</span></div>
 <form method="get" action="index.php#history" class="search history-search" id="history-filters">
 <input type="hidden" name="per_page" value="<?=$perPage?>">
+<?php if($record): ?><input type="hidden" name="record" value="<?=$record?>"><p class="filter-summary">รายการจ่าย #<?=$record?></p><?php endif ?>
 <div class="history-filter-fields">
 <label for="filter-group">กลุ่ม<select id="filter-group" name="filter_group"><option value="">ทุกกลุ่ม</option><?php foreach($groups as $group): ?><option value="<?=e($group)?>" <?=$filterGroup===$group?'selected':''?>><?=e($group)?></option><?php endforeach ?></select></label>
 <label for="filter-organization">ฟาร์ม / ซุ้ม / หน่วยงาน<select id="filter-organization" name="filter_organization"><option value="">ทุกหน่วยงาน</option><?php $filterNames=[]; foreach($organizations as $organization): ?><?php if(($filterGroup==='' || $organization['group_name']===$filterGroup) && !isset($filterNames[$organization['organization']])): $filterNames[$organization['organization']]=true; ?><option value="<?=e($organization['organization'])?>" <?=$filterOrg===$organization['organization']?'selected':''?>><?=e($organization['organization'])?></option><?php endif ?><?php endforeach ?><?php if($filterOrg!=='' && !isset($filterNames[$filterOrg])): ?><option value="<?=e($filterOrg)?>" selected><?=e($filterOrg)?></option><?php endif ?></select></label>
@@ -121,7 +140,7 @@ foreach($organizations as $item) if($item['group_name']===$selectedGroup && $ite
 <button class="secondary">ค้นหา</button><a href="index.php#history" class="quiet history-nav">ทั้งหมด</a>
 </form>
 <?php if($filterGroup!=='' || $filterOrg!==''): ?><p class="filter-summary"><?=e($filterGroup?:'ทุกกลุ่ม')?><?= $filterOrg!==''?' · '.e($filterOrg):'' ?></p><?php endif ?>
-<?=pagination($history,'index.php','history',['filter_group'=>$filterGroup,'filter_organization'=>$filterOrg,'search'=>$search],true)?>
+<?=pagination($history,'index.php','history',['filter_group'=>$filterGroup,'filter_organization'=>$filterOrg,'search'=>$search,'record'=>$record],true)?>
 <div class="history-list">
 <?php foreach($rows as $row): ?>
 <article class="history-item">
@@ -132,6 +151,6 @@ foreach($organizations as $item) if($item['group_name']===$selectedGroup && $ite
 <?php endforeach ?>
 <?php if(!$rows): ?><p class="empty">ไม่พบรายการ</p><?php endif ?>
 </div>
-<?php if(count($rows)>0): ?><?=pagination($history,'index.php','history',['filter_group'=>$filterGroup,'filter_organization'=>$filterOrg,'search'=>$search],true)?><?php endif ?>
+<?php if(count($rows)>0): ?><?=pagination($history,'index.php','history',['filter_group'=>$filterGroup,'filter_organization'=>$filterOrg,'search'=>$search,'record'=>$record],true)?><?php endif ?>
 </section>
 <?php endif ?></main></body></html>

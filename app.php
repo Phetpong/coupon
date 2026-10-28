@@ -22,6 +22,39 @@ function db(): PDO {
 }
 function e($v): string { return htmlspecialchars((string)$v, ENT_QUOTES, 'UTF-8'); }
 function asset_url(string $path): string { return $path.'?v='.filemtime(__DIR__.'/'.$path); }
+function audit_events(): array {
+    return ['login_success'=>'เข้าสู่ระบบสำเร็จ','login_failed'=>'เข้าสู่ระบบไม่สำเร็จ','logout'=>'ออกจากระบบ',
+        'coupon_issued'=>'จ่ายคูปอง','coupon_id_duplicate'=>'เลขบัตรซ้ำ','coupon_name_duplicate'=>'ชื่อ–นามสกุลซ้ำ',
+        'user_created'=>'เพิ่มบัญชี','user_updated'=>'แก้ไขบัญชี','password_changed'=>'เปลี่ยนรหัสผ่าน','user_deleted'=>'ลบบัญชี',
+        'access_denied'=>'ไม่มีสิทธิ์เข้าถึง','csrf_rejected'=>'คำขอไม่ผ่าน CSRF'];
+}
+function audit_text(string $value, int $length=200): string {
+    $value=mb_convert_encoding($value,'UTF-8','UTF-8');
+    $value=preg_replace('/[\x00-\x1F\x7F]/u',' ',$value);
+    // Never retain full identity numbers, even if submitted in a username or name.
+    return mb_substr(preg_replace('/[0-9]{13,}/','[redacted]',$value),0,$length,'UTF-8');
+}
+function audit_write(PDO $pdo, string $event, string $outcome, ?array $actor, ?string $targetType=null, ?int $targetId=null, array $details=[]): void {
+    global $config;
+    if (!isset(audit_events()[$event]) || !in_array($outcome,['success','denied'],true) || !in_array($targetType,[null,'coupon','staff'],true)) throw new LogicException('Invalid audit event');
+    // Explicit allowlist: never serialize a request, staff record, password or token.
+    $safe=[];
+    foreach (['page','reason','attempted_username'] as $key) if (isset($details[$key])) $safe[$key]=audit_text((string)$details[$key]);
+    foreach (['before','after'] as $side) {
+        foreach (['username','name'] as $key) if (isset($details[$side][$key])) $safe[$side][$key]=audit_text((string)$details[$side][$key]);
+    }
+    $ip=$_SERVER['REMOTE_ADDR']??'';
+    $pdo->prepare('INSERT INTO audit_logs (occurred_at,event_key,actor_id,actor_name,actor_username,actor_role,event_type,outcome,target_type,target_id,details,ip_address,user_agent) VALUES (NOW(6),?,?,?,?,?,?,?,?,?,?,?,?)')->execute([
+        $config['event_key'],$actor['id']??null,audit_text((string)($actor['name']??'')),audit_text((string)($actor['username']??''),80),
+        in_array($actor['role']??'',['admin','officer'],true)?$actor['role']:null,$event,$outcome,$targetType,$targetId,
+        json_encode($safe,JSON_UNESCAPED_UNICODE|JSON_INVALID_UTF8_SUBSTITUTE),filter_var($ip,FILTER_VALIDATE_IP)?$ip:null,
+        audit_text((string)($_SERVER['HTTP_USER_AGENT']??''),255)
+    ]);
+}
+function audit_attempt(string $event, ?array $actor=null, ?string $targetType=null, ?int $targetId=null, array $details=[]): void {
+    try { audit_write(db(),$event,$event==='logout'?'success':'denied',$actor,$targetType,$targetId,$details); }
+    catch (Throwable $ex) { error_log('Audit write failed: '.$event.' code='.$ex->getCode()); }
+}
 function current_staff(): ?array {
     if (!isset($_SESSION['staff']) || time()-($_SESSION['activity']??0)>7200) { unset($_SESSION['staff']); return null; }
     $q=db()->prepare('SELECT id,username,name,role FROM staff WHERE id=?'); $q->execute([$_SESSION['staff']['id']]);
@@ -76,9 +109,10 @@ function pagination(array $info, string $path, string $anchor, array $filters, b
     </nav>
     <?php return ob_get_clean();
 }
-function history_records(PDO $pdo, string $event, string $group, string $organization, string $search, int $page, int $size=50): array {
+function history_records(PDO $pdo, string $event, string $group, string $organization, string $search, int $page, int $size=50, int $record=0): array {
     $sql=' FROM coupons c JOIN staff s ON s.id=c.staff_id WHERE c.event_key=?';
     $args=[$event];
+    if ($record>0) { $sql.=' AND c.id=?'; $args[]=$record; }
     if ($group!=='') { $sql.=' AND c.group_name=?'; $args[]=$group; }
     if ($search!=='') { $sql.=' AND (c.citizen_id=? OR c.full_name LIKE ?)'; $args[]=$search; $args[]='%'.$search.'%'; }
     if ($organization!=='') {

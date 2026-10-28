@@ -2,8 +2,8 @@
 require __DIR__.'/app.php';
 require __DIR__.'/user-management.php';
 try { $staff=current_staff(); } catch(PDOException $e) { http_response_code(503); exit('ไม่สามารถเชื่อมต่อฐานข้อมูล'); }
-if (!$staff) { header('Location: index.php'); exit; }
-if (!is_admin($staff)) { http_response_code(403); exit('ไม่มีสิทธิ์จัดการผู้ใช้'); }
+if (!$staff) { audit_attempt('access_denied',null,null,null,['page'=>'users.php','reason'=>'login_required']); header('Location: index.php'); exit; }
+if (!is_admin($staff)) { audit_attempt('access_denied',$staff,null,null,['page'=>'users.php','reason'=>'admin_required']); http_response_code(403); exit('ไม่มีสิทธิ์จัดการผู้ใช้'); }
 $error=''; $fieldErrors=[]; $flash=$_SESSION['user_flash']??''; unset($_SESSION['user_flash']);
 $edit=['id'=>0,'username'=>'','name'=>'','role'=>'officer']; $users=[];
 $userSearch=trim((string)($_GET['q']??''));
@@ -13,7 +13,7 @@ $userContext=['q'=>$userSearch,'per_page'=>$userSize,'page'=>max(1,(int)($_GET['
 $listUrl='users.php?'.http_build_query($userContext);
 try {
     if ($_SERVER['REQUEST_METHOD']==='POST') {
-        if (!hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) { http_response_code(403); throw new RuntimeException('หน้าฟอร์มหมดอายุ กรุณารีเฟรช'); }
+        if (!hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) { audit_attempt('csrf_rejected',$staff,null,null,['page'=>'users.php']); http_response_code(403); throw new RuntimeException('หน้าฟอร์มหมดอายุ กรุณารีเฟรช'); }
         $action=(string)($_POST['action']??'');
         $id=(int)($_POST['id']??0);
         if ($action==='delete' && ($_POST['confirm_delete']??'')!=='yes') throw new RuntimeException('กรุณายืนยันการลบผู้ใช้');
