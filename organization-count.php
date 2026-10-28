@@ -1,7 +1,9 @@
 <?php
 require __DIR__.'/app.php';
 header('Content-Type: application/json; charset=utf-8');
-if (!current_staff()) {
+try { $staff=current_staff(); }
+catch (PDOException $e) { http_response_code(503); echo json_encode(['error'=>'ตรวจสอบจำนวนไม่ได้ กรุณาลองใหม่']); exit; }
+if (!$staff) {
     http_response_code(401); echo json_encode(['error'=>'กรุณาเข้าสู่ระบบใหม่']); exit;
 }
 session_write_close();

@@ -4,7 +4,7 @@ require __DIR__.'/user-management.php';
 try { $staff=current_staff(); } catch(PDOException $e) { http_response_code(503); exit('ไม่สามารถเชื่อมต่อฐานข้อมูล'); }
 if (!$staff) { header('Location: index.php'); exit; }
 if (!is_admin($staff)) { http_response_code(403); exit('ไม่มีสิทธิ์จัดการผู้ใช้'); }
-$error=''; $flash=$_SESSION['user_flash']??''; unset($_SESSION['user_flash']);
+$error=''; $fieldErrors=[]; $flash=$_SESSION['user_flash']??''; unset($_SESSION['user_flash']);
 $edit=['id'=>0,'username'=>'','name'=>'','role'=>'officer']; $users=[];
 $userSearch=trim((string)($_GET['q']??''));
 $userSize=page_size($_GET['per_page']??10);
@@ -13,7 +13,7 @@ $userContext=['q'=>$userSearch,'per_page'=>$userSize,'page'=>max(1,(int)($_GET['
 $listUrl='users.php?'.http_build_query($userContext);
 try {
     if ($_SERVER['REQUEST_METHOD']==='POST') {
-        if (!hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) throw new RuntimeException('หน้าฟอร์มหมดอายุ กรุณารีเฟรช');
+        if (!hash_equals($_SESSION['csrf'],(string)($_POST['csrf']??''))) { http_response_code(403); throw new RuntimeException('หน้าฟอร์มหมดอายุ กรุณารีเฟรช'); }
         $action=(string)($_POST['action']??'');
         $id=(int)($_POST['id']??0);
         if ($action==='delete' && ($_POST['confirm_delete']??'')!=='yes') throw new RuntimeException('กรุณายืนยันการลบผู้ใช้');
@@ -26,10 +26,18 @@ try {
 } catch(PDOException $e) {
     if(db()->inTransaction())db()->rollBack();
     $error=($e->errorInfo[1]??0)===1062?'ชื่อผู้ใช้นี้มีอยู่แล้ว':(($e->errorInfo[1]??0)===1451?'ลบไม่ได้ บัญชีนี้มีประวัติการใช้งาน':'บันทึกไม่ได้ กรุณาลองใหม่');
+    if (($e->errorInfo[1]??0)===1062) $fieldErrors['username']=$error;
 } catch(RuntimeException $e) { if(db()->inTransaction())db()->rollBack(); $error=$e->getMessage(); }
+if ($error && http_response_code()!==403 && in_array($_POST['action']??'',['create','update'],true)) {
+    $fieldErrors+=user_field_errors($_POST['action'],trim($_POST['username']??''),clean_text($_POST['name']??''),(string)($_POST['password']??''));
+}
 try {
     $editId=(int)($_GET['edit']??($_POST['id']??0));
-    if($editId>0) { $q=db()->prepare('SELECT id,username,name,role FROM staff WHERE id=?');$q->execute([$editId]); $edit=$q->fetch()?:$edit; }
+    if($editId>0) {
+        $q=db()->prepare('SELECT id,username,name,role FROM staff WHERE id=?');$q->execute([$editId]); $found=$q->fetch();
+        if ($found) $edit=$found;
+        else { $error='ไม่พบผู้ใช้ บัญชีอาจถูกลบแล้ว กรุณาเลือกรายการใหม่'; $edit['id']=$editId; }
+    }
     if($error && in_array($_POST['action']??'',['create','update'],true)) { $edit['username']=$_POST['username']??'';$edit['name']=$_POST['name']??''; }
     $where=$userSearch!==''?' WHERE (s.username LIKE ? OR s.name LIKE ?)':'';
     $args=$userSearch!==''?['%'.$userSearch.'%','%'.$userSearch.'%']:[];
@@ -39,16 +47,16 @@ try {
     $q->execute($args);$users=$q->fetchAll();
 } catch(PDOException $e) { $error='โหลดข้อมูลผู้ใช้ไม่ได้'; }
 ?>
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>จัดการผู้ใช้</title><link rel="icon" type="image/png" href="<?=e(asset_url('assets/logo.png'))?>"><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>จัดการผู้ใช้</title><link rel="icon" type="image/png" href="<?=e(asset_url('assets/logo-small.png'))?>"><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
 <?php require __DIR__.'/header.php'; ?>
 <main><h1>จัดการผู้ใช้</h1>
-<?php if($error): ?><p class="notice danger" role="alert"><?=e($error)?></p><?php endif ?>
+<?php if($error): ?><div class="notice danger" role="alert" tabindex="-1" data-error-focus><p><?=e($error)?></p><?php if($fieldErrors): ?><ul><?php foreach($fieldErrors as $field=>$message): ?><li><a href="#<?=e($field)?>"><?=e($message)?></a></li><?php endforeach ?></ul><?php endif ?></div><?php endif ?>
 <?php if($flash): ?><p class="notice success" role="status"><?=e($flash)?></p><?php endif ?>
 <section class="card user-editor" id="user-form"><h2><?=$edit['id']?'แก้ไขผู้ใช้':'เพิ่มผู้ใช้'?></h2><form method="post" action="<?=e($listUrl)?>">
 <?=csrf()?><input type="hidden" name="action" value="<?=$edit['id']?'update':'create'?>"><input type="hidden" name="id" value="<?=(int)$edit['id']?>">
-<label for="username">Username</label><input id="username" name="username" required minlength="2" maxlength="80" pattern="[a-zA-Z0-9_.-]{2,80}" autocomplete="off" value="<?=e($edit['username'])?>" <?=$edit['role']==='admin'?'readonly':''?>>
-<label for="name">ชื่อ–สกุล</label><input id="name" name="name" required maxlength="150" value="<?=e($edit['name'])?>">
-<label for="password">รหัสผ่าน <?=$edit['id']?'<span class="muted">เว้นว่างเพื่อใช้รหัสเดิม</span>':''?></label><input id="password" name="password" type="password" minlength="8" maxlength="72" autocomplete="new-password" <?=$edit['id']?'':'required'?> placeholder="อย่างน้อย 8 ตัว">
+<label for="username">Username</label><input id="username" name="username" <?=isset($fieldErrors['username'])?'aria-invalid="true" aria-describedby="username-error"':''?> required minlength="2" maxlength="80" pattern="[a-zA-Z0-9_.-]{2,80}" autocomplete="off" value="<?=e($edit['username'])?>" <?=$edit['role']==='admin'?'readonly':''?>><?php if(isset($fieldErrors['username'])): ?><p class="field-error" id="username-error"><?=e($fieldErrors['username'])?></p><?php endif ?>
+<label for="name">ชื่อ–สกุล</label><input id="name" name="name" <?=isset($fieldErrors['name'])?'aria-invalid="true" aria-describedby="name-error"':''?> required maxlength="150" value="<?=e($edit['name'])?>"><?php if(isset($fieldErrors['name'])): ?><p class="field-error" id="name-error"><?=e($fieldErrors['name'])?></p><?php endif ?>
+<label for="password">รหัสผ่าน <?=$edit['id']?'<span class="muted">เว้นว่างเพื่อใช้รหัสเดิม</span>':''?></label><input id="password" name="password" <?=isset($fieldErrors['password'])?'aria-invalid="true" aria-describedby="password-error"':''?> type="password" minlength="8" maxlength="72" autocomplete="new-password" <?=$edit['id']?'':'required'?> placeholder="อย่างน้อย 8 ตัว"><?php if(isset($fieldErrors['password'])): ?><p class="field-error" id="password-error"><?=e($fieldErrors['password'])?></p><?php endif ?>
 <p class="muted">สิทธิ์: <?=e($edit['role'])?></p><button class="primary">บันทึกผู้ใช้</button><?php if($edit['id']): ?><a class="admin-link" href="<?=e($listUrl)?>">ยกเลิก / เพิ่มผู้ใช้ใหม่</a><?php endif ?>
 </form></section>
 <section class="card history" id="users-list"><div class="history-heading"><h2>ผู้ใช้ทั้งหมด</h2><span><?=$userPage['total']?> บัญชี</span></div>

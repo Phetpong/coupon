@@ -7,3 +7,14 @@
 *.[sS][qQ][lL].*
 /.idea/
 /.vscode/
+/.agents/
+/.kiro/
+/.codex/
+/.aws/
+/skills-lock.json
+*.bak
+*.dump
+*.sqlite
+*.sqlite3
+*.pem
+*.key

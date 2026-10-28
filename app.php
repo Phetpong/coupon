@@ -8,7 +8,7 @@ session_start();
 header('Cache-Control: no-store');
 header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
-header("Content-Security-Policy: default-src 'self'; style-src 'self'; script-src 'self'; form-action 'self'; frame-ancestors 'none'");
+header("Content-Security-Policy: default-src 'self'; style-src 'self'; script-src 'self' https://static.cloudflareinsights.com; connect-src 'self' https://cloudflareinsights.com; form-action 'self'; frame-ancestors 'none'");
 }
 $config = require __DIR__.'/config.php';
 function db(): PDO {
@@ -44,10 +44,11 @@ function name_key(string $name): string {
 }
 function organization_count(PDO $pdo, string $event, string $group, string $organization): int {
     if ($organization === '') return 0;
-    $q = $pdo->prepare('SELECT organization FROM coupons WHERE event_key=? AND group_name=?');
+    $q = $pdo->prepare('SELECT BINARY organization AS organization,COUNT(*) AS total FROM coupons WHERE event_key=? AND group_name=? GROUP BY BINARY organization');
     $q->execute([$event, $group]);
     $count = 0;
-    foreach ($q as $row) if (mb_strtolower(clean_text($row['organization']), 'UTF-8') === mb_strtolower(clean_text($organization), 'UTF-8')) $count++;
+    $key=mb_strtolower(clean_text($organization), 'UTF-8');
+    foreach ($q as $row) if (mb_strtolower(clean_text($row['organization']), 'UTF-8') === $key) $count+=(int)$row['total'];
     return $count;
 }
 function page_size($value): int { return in_array((int)$value,[10,25,50],true)?(int)$value:10; }
@@ -76,18 +77,24 @@ function pagination(array $info, string $path, string $anchor, array $filters, b
     <?php return ob_get_clean();
 }
 function history_records(PDO $pdo, string $event, string $group, string $organization, string $search, int $page, int $size=50): array {
-    $sql='SELECT c.*,s.name AS staff_name FROM coupons c JOIN staff s ON s.id=c.staff_id WHERE c.event_key=?';
+    $sql=' FROM coupons c JOIN staff s ON s.id=c.staff_id WHERE c.event_key=?';
     $args=[$event];
     if ($group!=='') { $sql.=' AND c.group_name=?'; $args[]=$group; }
     if ($search!=='') { $sql.=' AND (c.citizen_id=? OR c.full_name LIKE ?)'; $args[]=$search; $args[]='%'.$search.'%'; }
-    $q=$pdo->prepare($sql.' ORDER BY c.id DESC'); $q->execute($args);
-    $matches=[];
-    foreach ($q as $row) {
-        if ($organization!=='' && mb_strtolower(clean_text($row['organization']),'UTF-8')!==mb_strtolower(clean_text($organization),'UTF-8')) continue;
-        $matches[]=$row;
+    if ($organization!=='') {
+        // Keep the existing whitespace/case matching without loading recipient records.
+        $q=$pdo->prepare('SELECT DISTINCT BINARY c.organization AS organization'.$sql); $q->execute($args);
+        $names=[]; $key=mb_strtolower(clean_text($organization),'UTF-8');
+        foreach ($q as $row) if (mb_strtolower(clean_text($row['organization']),'UTF-8')===$key) $names[]=$row['organization'];
+        if (!$names) return page_info(0,$page,$size)+['rows'=>[]];
+        $sql.=' AND BINARY c.organization IN ('.implode(',',array_fill(0,count($names),'?')).')';
+        $args=array_merge($args,$names);
     }
-    $info=page_info(count($matches),$page,$size);
-    return $info+['rows'=>array_slice($matches,$info['offset'],$info['size'])];
+    $q=$pdo->prepare('SELECT COUNT(*)'.$sql); $q->execute($args);
+    $info=page_info((int)$q->fetchColumn(),$page,$size);
+    $q=$pdo->prepare('SELECT c.*,s.name AS staff_name'.$sql.' ORDER BY c.id DESC LIMIT '.$info['size'].' OFFSET '.$info['offset']);
+    $q->execute($args);
+    return $info+['rows'=>$q->fetchAll()];
 }
 function valid_id(string $id): bool {
     if (!preg_match('/^[1-9][0-9]{12}$/D', $id)) return false;

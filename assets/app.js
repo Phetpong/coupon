@@ -16,7 +16,7 @@ document.querySelector('#issue-form')?.addEventListener('submit', function (even
 document.querySelector('#citizen_id')?.addEventListener('input', function () { this.setCustomValidity(''); });
 
 let historyRequest, historyVersion = 0, historyTimer;
-async function loadHistory(params, scroll = false) {
+async function loadHistory(params, scroll = false, updateUrl = true) {
   historyRequest?.abort();
   const version = ++historyVersion;
   historyRequest = new AbortController();
@@ -31,7 +31,12 @@ async function loadHistory(params, scroll = false) {
     if (!response.ok || !replacement || doc.querySelector('[role="alert"]')) throw new Error('โหลดประวัติไม่ได้ กรุณาลองใหม่ หรือตรวจสอบการเข้าสู่ระบบ');
     section.replaceWith(replacement);
     enhanceSelects(replacement);
-    if (scroll) replacement.scrollIntoView({behavior:'smooth',block:'start'});
+    if (updateUrl) {
+      const url=new URL('index.php',location.href);
+      url.search=params.toString(); url.hash='history';
+      if (url.href!==location.href) window.history.pushState(null,'',url);
+    }
+    if (scroll) replacement.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'start'});
   } catch (error) {
     if (error.name === 'AbortError' || version !== historyVersion) return;
     let message = section.querySelector('.history-error');
@@ -39,6 +44,10 @@ async function loadHistory(params, scroll = false) {
     message.textContent=error.message;
   } finally { if(version===historyVersion) document.querySelector('#history')?.removeAttribute('aria-busy'); }
 }
+window.addEventListener('popstate',()=>{
+  clearTimeout(historyTimer);
+  loadHistory(new URL(location.href).searchParams,false,false);
+});
 
 // Shared dialog picker for all selects, including AJAX-replaced filters.
 let pickerDialog, pickerTitle, pickerSearch, pickerList, activePicker;
@@ -98,7 +107,9 @@ function enhanceSelects(root=document) {
       trigger.disabled=select.disabled;
       trigger.textContent=select.selectedOptions[0]?.textContent || 'เลือกรายการ';
       trigger.setAttribute('aria-label',pickerLabel(select)+': '+trigger.textContent);
-      if (select.validity.valid) trigger.removeAttribute('aria-invalid');
+      if (select.getAttribute('aria-invalid')==='true') trigger.setAttribute('aria-invalid','true');
+      else if (select.validity.valid) trigger.removeAttribute('aria-invalid');
+      if (select.hasAttribute('aria-describedby')) trigger.setAttribute('aria-describedby',select.getAttribute('aria-describedby'));
     }
     const picker={select,trigger,sync};
     trigger.addEventListener('click',()=>openPicker(picker));
@@ -115,6 +126,18 @@ function enhanceSelects(root=document) {
     sync();
   });
 }
+document.addEventListener('click',event=>{
+  const link=event.target.closest('[data-error-focus] a');
+  if (!link) return;
+  const field=document.getElementById(link.hash.slice(1));
+  const target=field?.classList.contains('enhanced-native')?field.nextElementSibling:field;
+  if (target) { event.preventDefault(); target.focus(); }
+});
+window.addEventListener('pageshow',()=>{
+  requestAnimationFrame(()=>document.querySelector('[data-error-focus]')?.focus());
+  const button=document.querySelector('#issue-button');
+  if (button) { button.disabled=false; button.textContent='ยืนยันบันทึกและจ่ายคูปอง'; }
+});
 if (pickerSupported) {
   pickerDialog=document.createElement('dialog'); pickerDialog.id='shared-picker-dialog'; pickerDialog.className='picker-dialog';
   pickerDialog.setAttribute('aria-labelledby','shared-picker-title');
@@ -126,6 +149,13 @@ if (pickerSupported) {
   pickerList=document.createElement('div'); pickerList.className='picker-choices';
   pickerDialog.append(heading,pickerSearch,pickerList); document.body.append(pickerDialog);
   close.addEventListener('click',()=>pickerDialog.close());
+  pickerDialog.addEventListener('close',()=>{
+    // WebKit may return focus to body when a pointer opened the picker.
+    if (activePicker?.trigger.isConnected && !activePicker.trigger.disabled &&
+        (document.activeElement===document.body || pickerDialog.contains(document.activeElement))) {
+      activePicker.trigger.focus({preventScroll:true});
+    }
+  });
   pickerSearch.addEventListener('input',renderPickerChoices);
   enhanceSelects();
   window.addEventListener('pageshow',()=>document.querySelectorAll('select[data-picker-ready]').forEach(select=>{

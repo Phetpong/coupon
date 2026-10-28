@@ -1,6 +1,9 @@
 <?php
 require __DIR__.'/app.php';
 $error = ''; $result = null; $rows = []; $organizations = []; $total = 0; $staffTotal = 0;
+$fieldErrors=[];
+$draft=$_SESSION['issue_draft']??[]; unset($_SESSION['issue_draft']);
+$formValues=$_SERVER['REQUEST_METHOD']==='POST'?$_POST:$draft;
 $filterGroup=trim((string)($_GET['filter_group']??''));
 $filterOrg=clean_text((string)($_GET['filter_organization']??''));
 $search=trim((string)($_GET['search']??''));
@@ -11,7 +14,7 @@ if (isset($_SESSION['staff'])) $_SESSION['activity'] = time();
 try {
     current_staff();
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        if (!hash_equals($_SESSION['csrf'], (string)($_POST['csrf']??''))) throw new RuntimeException('หน้าฟอร์มหมดอายุ กรุณารีเฟรชแล้วลองใหม่');
+        if (!hash_equals($_SESSION['csrf'], (string)($_POST['csrf']??''))) { http_response_code(403); throw new RuntimeException('หน้าฟอร์มหมดอายุ กรุณารีเฟรชแล้วลองใหม่'); }
         $action = $_POST['action']??'';
         if ($action === 'logout') { $_SESSION = []; session_destroy(); header('Location: index.php'); exit; }
         if ($action === 'login') {
@@ -26,9 +29,11 @@ try {
             $id=trim($_POST['citizen_id']??''); $name=clean_text($_POST['full_name']??''); $group=$_POST['group_name']??'';
             $pickedOrg=(string)($_POST['organization_existing']??'');
             $org=clean_text($pickedOrg!=='' && $pickedOrg!=='__new__'?$pickedOrg:($_POST['organization']??''));
-            if (!valid_id($id)) throw new RuntimeException('เลขบัตรประชาชนไม่ถูกต้อง กรุณาตรวจสอบเลข 13 หลัก');
-            if ($name==='' || mb_strlen($name)>200 || mb_strlen($org)>200 || !in_array($group,$groups,true)) throw new RuntimeException('กรุณากรอกชื่อและเลือกกลุ่มผู้เข้าร่วมให้ถูกต้อง');
-            if (!preg_match('/^\S+\s+\S+/u',normalized_name($name))) throw new RuntimeException('กรุณากรอกชื่อและนามสกุล โดยเว้นวรรคระหว่างชื่อกับนามสกุล');
+            if (!valid_id($id)) $fieldErrors['citizen_id']='กรุณาตรวจสอบเลขบัตรประชาชน 13 หลัก';
+            if (!in_array($group,$groups,true)) $fieldErrors['group_name']='กรุณาเลือกกลุ่มผู้เข้าร่วม';
+            if (mb_strlen($org)>200) $fieldErrors['organization']='ชื่อหน่วยงานต้องไม่เกิน 200 ตัวอักษร';
+            if ($name==='' || mb_strlen($name)>200 || !preg_match('/^\S+\s+\S+/u',normalized_name($name))) $fieldErrors['full_name']='กรอกชื่อและนามสกุล เว้นวรรคระหว่างชื่อกับนามสกุล ไม่เกิน 200 ตัวอักษร';
+            if ($fieldErrors) throw new RuntimeException('กรุณาตรวจสอบข้อมูลที่ระบุ');
             try {
                 $q=db()->prepare('INSERT INTO coupons (event_key,citizen_id,full_name,name_key,group_name,organization,staff_id) VALUES (?,?,?,?,?,?,?)');
                 $q->execute([$config['event_key'],$id,$name,name_key($name),$group,$org,$_SESSION['staff']['id']]);
@@ -36,6 +41,7 @@ try {
                 $_SESSION['last_group']=$group; $_SESSION['last_organization']=$org;
             } catch (PDOException $ex) {
                 if (($ex->errorInfo[1]??0)!==1062) throw $ex;
+                $_SESSION['issue_draft']=array_intersect_key($_POST,array_flip(['citizen_id','full_name','group_name','organization','organization_existing']));
                 $q=db()->prepare('SELECT id FROM coupons WHERE event_key=? AND citizen_id=?'); $q->execute([$config['event_key'],$id]);
                 $existing=$q->fetchColumn();
                 if (!$existing) {
@@ -71,16 +77,17 @@ if (isset($_SESSION['staff'])) {
         }
     } catch (PDOException $ex) { error_log('Organization list unavailable: '.$ex->getCode()); }
 }
-$selectedGroup=(string)($_POST['group_name']??$_SESSION['last_group']??'');
-$selectedOrg=clean_text((string)($_POST['organization']??$_SESSION['last_organization']??''));
-if (isset($_POST['organization_existing']) && !in_array($_POST['organization_existing'],['','__new__'],true)) $selectedOrg=clean_text($_POST['organization_existing']);
+if ($result && $result['kind']!=='success') $fieldErrors[$result['kind']==='name_duplicate'?'full_name':'citizen_id']='พบข้อมูลซ้ำ กรุณาตรวจสอบก่อนจ่ายคูปอง';
+$selectedGroup=(string)($formValues['group_name']??$_SESSION['last_group']??'');
+$selectedOrg=clean_text((string)($formValues['organization']??$_SESSION['last_organization']??''));
+if (isset($formValues['organization_existing']) && !in_array($formValues['organization_existing'],['','__new__'],true)) $selectedOrg=clean_text($formValues['organization_existing']);
 $knownOrg=false;
 foreach($organizations as $item) if($item['group_name']===$selectedGroup && $item['organization']===$selectedOrg) $knownOrg=true;
 ?>
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ระบบจ่ายคูปอง · <?=e($config['event'])?></title><link rel="icon" type="image/png" href="<?=e(asset_url('assets/logo.png'))?>"><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ระบบจ่ายคูปอง · <?=e($config['event'])?></title><link rel="icon" type="image/png" href="<?=e(asset_url('assets/logo-small.png'))?>"><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
 <?php require __DIR__.'/header.php'; ?>
 <main><section class="hero"><h1><?=e($config['event'])?></h1></section>
-<?php if($error): ?><div class="notice danger" role="alert"><?=e($error)?></div><?php endif ?>
+<?php if($error && !$fieldErrors): ?><div class="notice danger" role="alert" tabindex="-1" data-error-focus><?=e($error)?></div><?php endif ?>
 <?php if(!isset($_SESSION['staff'])): ?>
 <section class="card login"><h2>เข้าสู่ระบบ</h2><form method="post"><?=csrf()?><input type="hidden" name="action" value="login"><label>ชื่อผู้ใช้<input name="username" required autocomplete="username" maxlength="80"></label><label>รหัสผ่าน<input type="password" name="password" required autocomplete="current-password"></label><button class="primary">เข้าสู่ระบบเจ้าหน้าที่</button></form></section>
 <?php else: ?>
@@ -88,16 +95,17 @@ foreach($organizations as $item) if($item['group_name']===$selectedGroup && $ite
 <section class="stats"><div><span>จ่ายคูปองทั้งหมด</span><strong><?=number_format((int)$total)?><small> คน</small></strong></div><div><span>ยอดสะสมของฉัน</span><strong><?=number_format((int)$staffTotal)?><small> คน</small></strong></div></section>
 <?php if($result): ?><section role="status" class="notice <?=$result['kind']==='success'?'success':'danger'?>"><h2><?=$result['kind']==='success'?'✓ บันทึกสำเร็จ สามารถมอบคูปองได้':($result['kind']==='name_duplicate'?'พบชื่อ–นามสกุลซ้ำ แต่เลขบัตรต่างกัน กรุณาตรวจสอบกับผู้ดูแลก่อนจ่าย':'รับคูปองแล้ว — ไม่สามารถรับซ้ำได้')?></h2><p><?=e($result['full_name'])?> · <?=e($result['citizen_id'])?></p><p><?=e($result['issued_at'])?><br>ผู้บันทึก: <?=e($result['staff_name'])?></p></section><?php endif ?>
 <div class="layout"><section class="card registration-panel" id="registration"><div class="panel-heading registration-heading"><div class="panel-title"><span class="panel-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 5H5v15h15v-9M9 15l1-4 8-8 3 3-8 8-4 1Z" stroke-linecap="round" stroke-linejoin="round"/></svg></span><h2>บันทึกผู้รับคูปอง</h2></div><a class="panel-jump" href="#history">ดูประวัติ ↓</a></div>
+<?php if($fieldErrors): ?><div class="notice danger" role="alert" tabindex="-1" data-error-focus><h2>กรุณาตรวจสอบข้อมูล</h2><ul><?php foreach($fieldErrors as $field=>$message): ?><li><a href="#<?=e($field)?>"><?=e($message)?></a></li><?php endforeach ?></ul></div><?php endif ?>
 <form method="post" id="issue-form"><?=csrf()?><input type="hidden" name="action" value="issue">
-<label for="group_name">กลุ่มผู้เข้าร่วม <em>*</em></label><select id="group_name" name="group_name" required><option value="">เลือกกลุ่มผู้เข้าร่วม</option><?php foreach($groups as $group): ?><option <?=$selectedGroup===$group?'selected':''?>><?=e($group)?></option><?php endforeach ?></select>
+<label for="group_name">กลุ่มผู้เข้าร่วม <em>*</em></label><select id="group_name" name="group_name" <?=isset($fieldErrors['group_name'])?'aria-invalid="true" aria-describedby="group_name-error"':''?> required><option value="">เลือกกลุ่มผู้เข้าร่วม</option><?php foreach($groups as $group): ?><option <?=$selectedGroup===$group?'selected':''?>><?=e($group)?></option><?php endforeach ?></select><?php if(isset($fieldErrors['group_name'])): ?><p class="field-error" id="group_name-error"><?=e($fieldErrors['group_name'])?></p><?php endif ?>
 <label for="organization-picker">ชื่อฟาร์ม / ซุ้ม / หน่วยงาน <span class="muted">(ถ้ามี)</span></label>
 <select id="organization-picker" name="organization_existing" aria-label="เลือกฟาร์ม ซุ้ม หรือหน่วยงาน"><option value="">เลือกหน่วยงาน</option><?php foreach($organizations as $item): ?><?php if($item['group_name']===$selectedGroup): ?><option value="<?=e($item['organization'])?>" <?=$selectedOrg===$item['organization']?'selected':''?>><?=e($item['organization'])?></option><?php endif ?><?php endforeach ?><option value="__new__" <?=$selectedOrg!=='' && !$knownOrg?'selected':''?>>+ เพิ่มชื่อหน่วยงานใหม่</option></select>
-<div id="organization-entry" <?=$knownOrg || $selectedOrg===''?'hidden':''?>><label for="organization" class="muted">ชื่อหน่วยงานใหม่</label><input id="organization" name="organization" autocomplete="off" maxlength="200" placeholder="พิมพ์ชื่อหน่วยงาน" value="<?=e($selectedOrg)?>"></div>
+<div id="organization-entry" <?=$knownOrg || $selectedOrg===''?'hidden':''?>><label for="organization" class="muted">ชื่อหน่วยงานใหม่</label><input id="organization" name="organization" <?=isset($fieldErrors['organization'])?'aria-invalid="true" aria-describedby="organization-error"':''?> autocomplete="off" maxlength="200" placeholder="พิมพ์ชื่อหน่วยงาน" value="<?=e($selectedOrg)?>"><?php if(isset($fieldErrors['organization'])): ?><p class="field-error" id="organization-error"><?=e($fieldErrors['organization'])?></p><?php endif ?></div>
 <template id="organization-source"><?php foreach($organizations as $organization): ?><option data-group="<?=e($organization['group_name'])?>" value="<?=e($organization['organization'])?>"></option><?php endforeach ?></template>
 <output id="organization-count" class="organization-count" aria-live="polite" hidden></output>
 <button type="button" class="view-members" id="view-members" hidden>ดูรายชื่อที่ลงทะเบียนแล้ว ↓</button>
-<label for="citizen_id">เลขบัตรประจำตัวประชาชน <em>*</em></label><input id="citizen_id" name="citizen_id" inputmode="numeric" pattern="[0-9]{13}" minlength="13" maxlength="13" required autocomplete="off" placeholder="กรอกเลขบัตร 13 หลัก" value="<?=e($_POST['citizen_id']??'')?>">
-<label for="full_name">ชื่อ–นามสกุล <em>*</em></label><input id="full_name" name="full_name" required maxlength="200" placeholder="คำนำหน้า ชื่อ และนามสกุล" value="<?=e($_POST['full_name']??'')?>">
+<label for="citizen_id">เลขบัตรประจำตัวประชาชน <em>*</em></label><input id="citizen_id" name="citizen_id" <?=isset($fieldErrors['citizen_id'])?'aria-invalid="true" aria-describedby="citizen_id-error"':''?> inputmode="numeric" pattern="[0-9]{13}" minlength="13" maxlength="13" required autocomplete="off" placeholder="กรอกเลขบัตร 13 หลัก" value="<?=e($formValues['citizen_id']??'')?>"><?php if(isset($fieldErrors['citizen_id'])): ?><p class="field-error" id="citizen_id-error"><?=e($fieldErrors['citizen_id'])?></p><?php endif ?>
+<label for="full_name">ชื่อ–นามสกุล <em>*</em></label><input id="full_name" name="full_name" <?=isset($fieldErrors['full_name'])?'aria-invalid="true" aria-describedby="full_name-error"':''?> required maxlength="200" placeholder="คำนำหน้า ชื่อ และนามสกุล" value="<?=e($formValues['full_name']??'')?>"><?php if(isset($fieldErrors['full_name'])): ?><p class="field-error" id="full_name-error"><?=e($fieldErrors['full_name'])?></p><?php endif ?>
 <button class="primary" id="issue-button">ยืนยันบันทึกและจ่ายคูปอง</button></form></section>
 </div>
 <section class="card history history-panel" id="history">

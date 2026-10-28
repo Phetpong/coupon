@@ -1,5 +1,12 @@
 <?php
 // Shared server-side user operations. Never accept a role from the browser.
+function user_field_errors(string $action, string $username, string $name, string $password): array {
+    $errors=[];
+    if (!preg_match('/^[a-zA-Z0-9_.-]{2,80}$/D',$username)) $errors['username']='ใช้ a-z, 0-9, _, . หรือ - จำนวน 2–80 ตัว';
+    if ($name==='' || mb_strlen($name)>150) $errors['name']='กรอกชื่อ–สกุล ไม่เกิน 150 ตัวอักษร';
+    if (($action==='create' || $password!=='') && (mb_strlen($password)<8 || strlen($password)>72)) $errors['password']='รหัสผ่านต้องมีอย่างน้อย 8 ตัว และไม่เกิน 72 ไบต์';
+    return $errors;
+}
 function manage_user(PDO $pdo, int $actorId, string $action, int $id, string $username, string $name, string $password): void {
     $actor=$pdo->prepare('SELECT username,role FROM staff WHERE id=?'); $actor->execute([$actorId]);
     if (!is_admin($actor->fetch() ?: null)) throw new RuntimeException('ไม่มีสิทธิ์จัดการผู้ใช้');
@@ -15,8 +22,8 @@ function manage_user(PDO $pdo, int $actorId, string $action, int $id, string $us
         if ($q->fetchColumn()>0) throw new RuntimeException('ลบไม่ได้ บัญชีนี้มีประวัติจ่ายคูปอง');
         $pdo->prepare('DELETE FROM staff WHERE id=?')->execute([$id]); return;
     }
-    if (!preg_match('/^[a-zA-Z0-9_.-]{2,80}$/D',$username) || $name==='' || mb_strlen($name)>150) throw new RuntimeException('ชื่อผู้ใช้ต้องมี 2–80 ตัว (a-z, 0-9, _, ., -) และกรอกชื่อ–สกุล');
-    if (($action==='create' || $password!=='') && (mb_strlen($password)<8 || strlen($password)>72)) throw new RuntimeException('รหัสผ่านต้องมีอย่างน้อย 8 ตัว และไม่เกิน 72 ไบต์');
+    $errors=user_field_errors($action,$username,$name,$password);
+    if ($errors) throw new RuntimeException(reset($errors));
     if ($action==='update' && ($target['username']==='phet' || $target['role']==='admin') && $username!==$target['username']) throw new RuntimeException('ไม่สามารถเปลี่ยน username ของผู้ดูแลระบบ');
     if ($action==='create') {
         $pdo->prepare("INSERT INTO staff(username,name,password_hash,role) VALUES(?,?,?,'officer')")->execute([$username,$name,password_hash($password,PASSWORD_DEFAULT)]);

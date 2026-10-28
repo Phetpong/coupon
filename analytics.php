@@ -24,7 +24,7 @@ $peak=max([1,...array_column($data['daily'],'total')]);
 $dailyChart=array_slice($data['daily'],-14);
 $reportNames=['group'=>'ตามกลุ่มผู้เข้าร่วม','organization'=>'ตามฟาร์ม / ซุ้ม / หน่วยงาน','staff'=>'ตามเจ้าหน้าที่','daily'=>'ตามวันที่'];
 ?>
-<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>วิเคราะห์ข้อมูล · <?=e($config['event'])?></title><link rel="icon" type="image/png" href="<?=e(asset_url('assets/logo.png'))?>"><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
+<!doctype html><html lang="th"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>วิเคราะห์ข้อมูล · <?=e($config['event'])?></title><link rel="icon" type="image/png" href="<?=e(asset_url('assets/logo-small.png'))?>"><link rel="stylesheet" href="<?=e(asset_url('assets/style.css'))?>"><script src="<?=e(asset_url('assets/app.js'))?>" defer></script></head><body>
 <?php require __DIR__.'/header.php'; ?>
 <main class="analytics-page"><div class="analytics-title"><h1>วิเคราะห์การจ่ายคูปอง</h1><p><?=e($config['event'])?></p></div>
 <section class="card"><form method="get" action="analytics.php" class="analytics-filters">
@@ -34,7 +34,7 @@ $reportNames=['group'=>'ตามกลุ่มผู้เข้าร่ว�
 <input type="hidden" name="report" value="<?=e($report)?>"><input type="hidden" name="per_page" value="<?=$size?>">
 <div class="analytics-actions"><button class="primary">แสดงผล</button><a class="quiet" href="analytics.php">ล้างตัวกรอง</a></div>
 </form></section>
-<?php if($error): ?><p class="notice danger" role="alert"><?=e($error)?></p><?php else: ?>
+<?php if($error): ?><p class="notice danger" role="alert" tabindex="-1" data-error-focus><?=e($error)?></p><?php else: ?>
 <p class="analytics-scope"><?=$from!==''?e(analytics_day($from)):'เริ่มต้นงาน'?> – <?=$to!==''?e(analytics_day($to)):'ล่าสุด'?> · เวลาไทย</p>
 <section class="analytics-metrics" aria-label="สรุปตามตัวกรอง">
 <?php foreach(['total'=>'จ่ายคูปองแล้ว','staff_count'=>'เจ้าหน้าที่ที่บันทึก','organization_count'=>'หน่วยงานที่ระบุ','day_count'=>'วันที่มีการจ่าย'] as $key=>$label): ?><div><span><?=e($label)?></span><strong><?=number_format((int)$summary[$key])?></strong><small><?=$key==='day_count'?'วัน':($key==='organization_count'?'แห่ง':'คน')?></small></div><?php endforeach ?>
